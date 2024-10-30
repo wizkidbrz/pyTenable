@@ -1,0 +1,93 @@
+from openpyxl import load_workbook
+from datetime import datetime
+from tenable.sc import TenableSC
+
+# Connect to TenableSC and login
+sc = TenableSC('https://your-tenable-sc-url')
+sc.login('your-username', 'your-password')
+
+# Load the workbook
+file_path = 'path/to/your/excel_file.xlsx'  # Update with your file path
+workbook = load_workbook(file_path)
+
+# List of scan names and their corresponding worksheet names
+scans_to_worksheets = [
+    {"scan_name": "Scan 1", "worksheet_name": "Worksheet 1"},
+    {"scan_name": "Scan 2", "worksheet_name": "Worksheet 2"},
+    {"scan_name": "Scan 3", "worksheet_name": "Worksheet 3"},
+    {"scan_name": "Scan 4", "worksheet_name": "Worksheet 4"},
+    {"scan_name": "Scan 5", "worksheet_name": "Worksheet 5"},
+    {"scan_name": "Scan 6", "worksheet_name": "Worksheet 6"},
+    {"scan_name": "Scan 7", "worksheet_name": "Worksheet 7"},
+    {"scan_name": "Scan 8", "worksheet_name": "Worksheet 8"},
+    {"scan_name": "Scan 9", "worksheet_name": "Worksheet 9"},
+    {"scan_name": "Scan 10", "worksheet_name": "Worksheet 10"},
+    {"scan_name": "Scan 11", "worksheet_name": "Worksheet 11"},
+    {"scan_name": "Scan 12", "worksheet_name": "Worksheet 12"}
+]
+
+# Loop through each scan and update the corresponding worksheet
+for scan_mapping in scans_to_worksheets:
+    scan_name = scan_mapping['scan_name']
+    worksheet_name = scan_mapping['worksheet_name']
+
+    # Retrieve manageable scans and get the latest scan ID for the specified name
+    manageable_scans = sc.scan_instances.list()['manageable']
+    filtered_scans = [scan for scan in manageable_scans if scan['name'] == scan_name]
+    if filtered_scans:
+        latest_scan = max(filtered_scans, key=lambda x: int(x['id']))
+    else:
+        print(f"No scans found with the name: {scan_name}")
+        continue
+
+    # Retrieve scan ID and scanned IP count
+    scan_id = latest_scan['id']
+    scan_details = sc.scan_instances.details(scan_id)
+    IPs = scan_details.get('scannedIPs', 'No IP count available')
+
+    # Retrieve scan results using the latest scan ID
+    scan_results = sc.analysis.scan(scan_id)
+
+    # Filter out entries with severity labeled as "info" and collect unique Plugin Names and IP Addresses
+    plugin_names = set()
+    unique_ips = set()
+    for vuln in scan_results:
+        severity = vuln.get('severity', {}).get('name')
+        if severity and severity.lower() != 'info':
+            plugin_name = vuln.get('pluginName')
+            ip_address = vuln.get('ip')
+            if plugin_name:
+                plugin_names.add(plugin_name.strip().lower())  # Normalize and add to set for uniqueness
+            if ip_address:
+                unique_ips.add(ip_address)  # Add IP address to unique set
+
+    # Save the number of unique Plugin Names and IP Addresses after filtering
+    Issues = len(plugin_names)
+    OOC = len(unique_ips)
+
+    # Select the worksheet corresponding to the current scan
+    worksheet = workbook[worksheet_name]
+
+    # Find the last row
+    last_row = worksheet.max_row + 1
+
+    # Define data to write
+    IPs_value = IPs
+    Issues_value = Issues
+    OOC_value = OOC
+    current_date = datetime.now().strftime("%m/%d/%Y")
+
+    # Write data to specified columns in the last row
+    worksheet[f'C{last_row}'] = IPs_value
+    worksheet[f'D{last_row}'] = Issues_value
+    worksheet[f'E{last_row}'] = current_date
+    worksheet[f'F{last_row}'] = OOC_value
+
+    print(f"Data written to row {last_row} in the worksheet '{worksheet_name}'.")
+
+# Save the workbook
+workbook.save(file_path)
+print("Workbook updated successfully.")
+
+# Logout from TenableSC
+sc.logout()
